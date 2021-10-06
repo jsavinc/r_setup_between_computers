@@ -1,6 +1,3 @@
-## cribbed from Tom Jemmett
-## https://gist.github.com/tomjemmett/5033cdf5ca078e3d254db803b7b65f7a#file-reinstall_packages-r
-
 library(tidyverse)
 
 figure_out_repository <- function(package) {
@@ -18,15 +15,25 @@ packages_to_install <- tibble(package = installed.packages(priority = "NA")[,"Pa
   filter(!is.na(source)) |>
   mutate(s = ifelse(source == "CRAN", source, "GitHub"),
          p = ifelse(source == "CRAN", package, source))
+
+## if there is an existing file from before, merge the previous and current packages
+if (file.exists("./packages_to_install.rds")) {
+  list_of_existing_packages_to_install <- readRDS("./packages_to_install.rds")
   
+  packages_to_install <-
+    bind_rows(
+      packages_to_install,
+      tibble::tibble(package = list_of_existing_packages_to_install$CRAN, source = "CRAN", s = "CRAN") |> mutate(p=package),
+      tibble::enframe(list_of_existing_packages_to_install$GitHub, name = "package", value = "source") |> mutate(s="GitHub", p=source)
+    ) %>%
+    distinct
+}
+
 packages_to_install |>
   group_by(s) |>
   summarise(across(p, list)) |>
   (\(.x) set_names(.x$p, .x$s))() |>
   saveRDS("./packages_to_install.rds")
 
-# once R has reinstalled
-
-p <- readRDS("./packages_to_install.rds")
-install.packages(p$CRAN)
-devtools::install_github(p$GitHub)
+## nuclear option - if something's gone wrong, uncomment below
+# file.remove("./packages_to_install.rds")
